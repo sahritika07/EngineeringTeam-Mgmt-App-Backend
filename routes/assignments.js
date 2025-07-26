@@ -177,6 +177,80 @@ router.post("/", protect, isAdminOrManager, async (req, res) => {
 // @desc    Update assignment
 // @route   PUT /api/assignments/:id
 // @access  Private
+// router.put("/:id", protect, async (req, res) => {
+//   try {
+//     let assignment = await Assignment.findById(req.params.id)
+
+//     if (!assignment) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Assignment not found",
+//       })
+//     }
+
+//     // Check permissions
+//     const canUpdate =
+//       req.user.role === "admin" ||
+//       assignment.assignedBy.toString() === req.user.id ||
+//       assignment.assignee.toString() === req.user.id
+
+//     if (!canUpdate) {
+//       return res.status(403).json({
+//         success: false,
+//         message: "Not authorized to update this assignment",
+//       })
+//     }
+
+//     // Engineers can only update certain fields
+//     if (req.user.role === "engineer") {
+//       const allowedFields = ["progress", "status", "actualHours"]
+//       const updateFields = {}
+
+//       allowedFields.forEach((field) => {
+//         if (req.body[field] !== undefined) {
+//           updateFields[field] = req.body[field]
+//         }
+//       })
+
+//       assignment = await Assignment.findByIdAndUpdate(req.params.id, updateFields, { new: true, runValidators: true })
+//         .populate("project", "name description")
+//         .populate("assignee", "firstName lastName email department")
+//         .populate("assignedBy", "firstName lastName email")
+//     } else {
+//       // Admins and managers can update all fields
+//       assignment = await Assignment.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
+//         .populate("project", "name description")
+//         .populate("assignee", "firstName lastName email department")
+//         .populate("assignedBy", "firstName lastName email")
+//     }
+
+//     res.status(200).json({
+//       success: true,
+//       message: "Assignment updated successfully",
+//       data: assignment,
+//     })
+//   } catch (error) {
+//     console.error("Update assignment error:", error)
+
+//     if (error.name === "ValidationError") {
+//       const messages = Object.values(error.errors).map((err) => err.message)
+//       return res.status(400).json({
+//         success: false,
+//         message: "Validation error",
+//         errors: messages,
+//       })
+//     }
+
+//     res.status(500).json({
+//       success: false,
+//       message: "Server error",
+//     })
+//   }
+// })
+
+
+
+
 router.put("/:id", protect, async (req, res) => {
   try {
     let assignment = await Assignment.findById(req.params.id)
@@ -212,16 +286,45 @@ router.put("/:id", protect, async (req, res) => {
         }
       })
 
-      assignment = await Assignment.findByIdAndUpdate(req.params.id, updateFields, { new: true, runValidators: true })
+      assignment = await Assignment.findByIdAndUpdate(
+        req.params.id,
+        updateFields,
+        { new: true, runValidators: true }
+      )
         .populate("project", "name description")
         .populate("assignee", "firstName lastName email department")
         .populate("assignedBy", "firstName lastName email")
     } else {
       // Admins and managers can update all fields
-      assignment = await Assignment.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
+      assignment = await Assignment.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        { new: true, runValidators: true }
+      )
         .populate("project", "name description")
         .populate("assignee", "firstName lastName email department")
         .populate("assignedBy", "firstName lastName email")
+    }
+
+    // 🔹 NEW CODE: Update project progress dynamically
+    if (assignment.project?._id || assignment.project) {
+      const projectId = assignment.project._id || assignment.project
+
+      // find all assignments of this project
+      const assignments = await Assignment.find({ project: projectId })
+
+      const totalProgress = assignments.reduce(
+        (sum, a) => sum + (a.progress || 0),
+        0
+      )
+
+      const averageProgress =
+        assignments.length > 0
+          ? Math.round(totalProgress / assignments.length)
+          : 0
+
+      // update project progress
+      await Project.findByIdAndUpdate(projectId, { progress: averageProgress })
     }
 
     res.status(200).json({
@@ -247,6 +350,7 @@ router.put("/:id", protect, async (req, res) => {
     })
   }
 })
+
 
 // @desc    Delete assignment
 // @route   DELETE /api/assignments/:id
@@ -397,6 +501,11 @@ router.post("/:id/time-entries", protect, async (req, res) => {
     })
   }
 })
+
+
+
+
+
 
 // @desc    Get assignment statistics
 // @route   GET /api/assignments/stats

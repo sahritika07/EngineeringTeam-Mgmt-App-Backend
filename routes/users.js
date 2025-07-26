@@ -421,4 +421,30 @@ router.get("/available-engineers", protect, isAdminOrManager, async (req, res) =
   }
 })
 
+
+// @desc    Get Manager Dashboard Stats
+// @route   GET /api/dashboard/manager-stats
+// @access  Private (Admin/Manager)
+router.get("/manager-stats", protect, isAdminOrManager, async (req, res) => {
+  try {
+    // Count engineers (active)
+    const teamSize = await User.countDocuments({ role: "engineer", isActive: true })
+
+    // Count active projects
+    const activeProjects = await Project.countDocuments({ status: "active" })
+
+    res.status(200).json({
+      success: true,
+      data: {
+        teamSize,
+        activeProjects,
+      },
+    })
+  } catch (error) {
+    console.error("Manager stats error:", error)
+    res.status(500).json({ success: false, message: "Server error" })
+  }
+})
+
+
 module.exports = router

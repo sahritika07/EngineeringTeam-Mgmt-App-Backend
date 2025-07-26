@@ -204,4 +204,16 @@ AssignmentSchema.post("save", async function () {
   }
 })
 
+
+// AssignmentSchema.post("save", async function () {
+//   const Project = mongoose.model("Project");
+//   const project = await Project.findById(this.project);
+//   if (project) {
+//     await project.updateProgress();
+//   }
+// });
+
+
+
+
 module.exports = mongoose.model("Assignment", AssignmentSchema)
