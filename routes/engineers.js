@@ -12,6 +12,8 @@ const router = express.Router()
 
 
 
+
+
 // @desc    Get all engineers
 // @route   GET /api/engineers
 // @access  Private (Admin/Manager)
@@ -84,6 +86,106 @@ router.get("/", protect, isAdminOrManager, async (req, res) => {
     })
   }
 })
+
+
+
+// Place this ABOVE router.get("/:id") !!!
+router.get("/overview", protect, async (req, res) => {
+  try {
+    const matchQuery = {}
+    let assignmentQuery = {}
+
+    // Filter projects & assignments based on user role
+    if (req.user.role === "manager") {
+      matchQuery.manager = req.user._id
+      assignmentQuery.manager = req.user._id
+    } else if (req.user.role === "engineer") {
+      const userAssignments = await Assignment.find({ assignee: req.user._id }).distinct("project")
+      matchQuery._id = { $in: userAssignments }
+      assignmentQuery.assignee = req.user._id
+    }
+
+    // ------- Project Stats -------
+    const projectStats = await Project.aggregate([
+      { $match: matchQuery },
+      {
+        $group: {
+          _id: null,
+          totalProjects: { $sum: 1 },
+          activeProjects: {
+            $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
+          },
+          completedProjects: {
+            $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] },
+          },
+          totalBudget: { $sum: "$budget" },
+          totalBudgetUsed: { $sum: "$budgetUsed" },
+          averageProgress: { $avg: "$progress" },
+        },
+      },
+    ])
+
+    const projectData = projectStats[0] || {
+      totalProjects: 0,
+      activeProjects: 0,
+      completedProjects: 0,
+      totalBudget: 0,
+      totalBudgetUsed: 0,
+      averageProgress: 0,
+    }
+
+    // Add budget utilization %
+    projectData.budgetUtilization = projectData.totalBudget
+      ? Math.round((projectData.totalBudgetUsed / projectData.totalBudget) * 100)
+      : 0
+
+    // ------- Assignment Stats -------
+    const assignments = await Assignment.find(assignmentQuery)
+    const assignmentData = {
+      totalAssignments: assignments.length,
+      activeAssignments: assignments.filter((a) =>
+        ["active", "in-progress"].includes(a.status)
+      ).length,
+      completedAssignments: assignments.filter((a) => a.status === "completed").length,
+      overdueAssignments: assignments.filter(
+        (a) => a.deadline && new Date(a.deadline) < new Date() && a.status !== "completed"
+      ).length,
+    }
+
+    // ------- Engineers Stats -------
+    const engineers = await User.find({ role: "engineer", isActive: true })
+    const engineersData = {
+      totalEngineers: engineers.length,
+      avgUtilization:
+        engineers.length > 0
+          ? Math.round(
+              engineers.reduce((sum, eng) => sum + (eng.utilization || 0), 0) /
+                engineers.length
+            )
+          : 0,
+      avgEfficiency:
+        engineers.length > 0
+          ? Math.round(
+              engineers.reduce((sum, eng) => sum + (eng.efficiency || 0), 0) /
+                engineers.length
+            )
+          : 0,
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        projects: projectData,
+        assignments: assignmentData,
+        engineers: engineersData,
+      },
+    })
+  } catch (error) {
+    console.error("Stats Overview Error:", error)
+    res.status(500).json({ success: false, message: "Server error" })
+  }
+})
+
 
 
 router.put("/post", protect, isAdminOrManager, async (req, res) => {
@@ -433,5 +535,8 @@ router.post("/post", protect, isAdminOrManager, async (req, res) => {
     });
   }
 });
+
+
+
 
 module.exports = router

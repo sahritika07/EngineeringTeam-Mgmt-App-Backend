@@ -379,9 +379,20 @@ router.get("/stats/overview", protect, async (req, res) => {
       averageProgress: 0,
     }
 
+        const utilization =
+      result.totalBudget > 0
+        ? ((result.totalBudgetUsed / result.totalBudget) * 100).toFixed(2)
+        : 0
+
+        console.log("Message---"   ,utilization)
+
+
     res.status(200).json({
       success: true,
-      data: result,
+      data: {
+        ...result,
+        utilization: `${utilization}%`, // 👈 new key added
+      },
     })
   } catch (error) {
     console.error("Get project stats error:", error)
